@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 
 namespace PdfiumViewer
 {
-    internal class PdfFile : IDisposable
+    public class PdfFile : IDisposable
     {
         private static readonly Encoding FPDFEncoding = new UnicodeEncoding(false, false, false);
 
@@ -37,6 +37,7 @@ namespace PdfiumViewer
 
             LoadDocument(document);
         }
+
 
         public PdfBookmarkCollection Bookmarks { get; private set; }
 
@@ -72,6 +73,11 @@ namespace PdfiumViewer
             return true;
         }
 
+        public PageData GetPageData(int pageNumber)
+        {
+            return new PageData(_document, _form, pageNumber);
+        }
+
         public PdfPageLinks GetPageLinks(int pageNumber, Size pageSize)
         {
             if (_disposed)
@@ -79,7 +85,7 @@ namespace PdfiumViewer
 
             var links = new List<PdfPageLink>();
 
-            using (var pageData = new PageData(_document, _form, pageNumber))
+            using (var pageData = GetPageData(pageNumber))
             {
                 int link = 0;
                 IntPtr annotation;
@@ -634,7 +640,7 @@ namespace PdfiumViewer
             }
         }
 
-        private class PageData : IDisposable
+        public class PageData : IDisposable
         {
             private readonly IntPtr _form;
             private bool _disposed;

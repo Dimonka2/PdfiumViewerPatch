@@ -20,6 +20,12 @@ namespace PdfiumViewer
         private PdfFile _file;
         private readonly List<SizeF> _pageSizes;
 
+        public class TextElement
+        {
+            public char Character { get; set; }
+            public RectangleF Bounds { get; set; }
+        }
+
         /// <summary>
         /// Initializes a new instance of the PdfDocument class with the provided path.
         /// </summary>
@@ -355,6 +361,81 @@ namespace PdfiumViewer
             return bitmap;
         }
 
+        /// <summary>
+        /// Renders a specified region of a PDF page directly to an image, bypassing full-page rendering.
+        /// The resulting image is created at 72 DPI with the dimensions (renderWidth x renderHeight).
+        /// The region rendered is defined by the offset (offsetX, offsetY) and the size (pageWidth x pageHeight)
+        /// on the PDF page. This method directly renders only the desired portion of the page.
+        /// </summary>
+        /// <param name="page">Number of the page to render.</param>
+        /// <param name="renderWidth">Width (in pixels) of the output image.</param>
+        /// <param name="renderHeight">Height (in pixels) of the output image.</param>
+        /// <param name="offsetX">
+        /// The horizontal offset (in pixels) from the top-left of the PDF page where rendering should begin.
+        /// </param>
+        /// <param name="offsetY">
+        /// The vertical offset (in pixels) from the top-left of the PDF page where rendering should begin.
+        /// </param>
+        /// <param name="pageWidth">
+        /// The width (in pixels) of the region on the PDF page to render.
+        /// </param>
+        /// <param name="pageHeight">
+        /// The height (in pixels) of the region on the PDF page to render.
+        /// </param>
+        /// <param name="rotate">Rotation to apply to the rendered output.</param>
+        /// <param name="flags">Flags used to influence the rendering.</param>
+        /// <returns>The rendered image of the specified region.</returns>
+        public Image Render(int page, int renderWidth, int renderHeight, int offsetX, int offsetY, int pageWidth, int pageHeight, PdfRotation rotate, PdfRenderFlags flags)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(GetType().Name);
+
+            // Create a bitmap for the region.
+            var bitmap = new Bitmap(renderWidth, renderHeight, PixelFormat.Format32bppArgb);
+            bitmap.SetResolution(72, 72);
+
+            // Lock the bitmap bits.
+            var data = bitmap.LockBits(new Rectangle(0, 0, renderWidth, renderHeight), ImageLockMode.ReadWrite, bitmap.PixelFormat);
+
+            try
+            {
+                // Create the PDFium bitmap handle using the bitmap's scan pointer.
+                var handle = NativeMethods.FPDFBitmap_CreateEx(renderWidth, renderHeight, 4, data.Scan0, renderWidth * 4);
+                try
+                {
+                    // Fill with background color.
+                    uint background = (flags & PdfRenderFlags.Transparent) == 0 ? 0xFFFFFFFF : 0x00FFFFFF;
+                    NativeMethods.FPDFBitmap_FillRect(handle, 0, 0, renderWidth, renderHeight, background);
+
+                    // Render only the desired region by specifying non-zero offset parameters.
+                    bool success = _file.RenderPDFPageToBitmap(
+                        page,
+                        handle,
+                        (int)72, (int)72,
+                        offsetX, offsetY,     // use the offset to start rendering at the correct point on the PDF page
+                        pageWidth, pageHeight,
+                        (int)rotate,
+                        FlagsToFPDFFlags(flags),
+                        (flags & PdfRenderFlags.Annotations) != 0
+                    );
+
+                    if (!success)
+                        throw new Win32Exception();
+                }
+                finally
+                {
+                    NativeMethods.FPDFBitmap_Destroy(handle);
+                }
+            }
+            finally
+            {
+                bitmap.UnlockBits(data);
+            }
+
+            return bitmap;
+        }
+
+
         private NativeMethods.FPDF FlagsToFPDFFlags(PdfRenderFlags flags)
         {
             return (NativeMethods.FPDF)(flags & ~(PdfRenderFlags.Transparent | PdfRenderFlags.CorrectFromDpi));
@@ -425,6 +506,49 @@ namespace PdfiumViewer
         {
             return _file.Search(text, matchCase, wholeWord, startPage, endPage);
         }
+
+        public IList<TextElement> GetTextElementsInArea(int page, RectangleF area)
+        {
+            List<TextElement> elements = new List<TextElement>();
+
+            // Get native page data (you need to implement _file.GetPageData to expose the native handle).
+            using (var pageData = _file.GetPageData(page))
+            {
+                IntPtr nativePageHandle = pageData.Page; // Ensure this helper is available.
+
+                IntPtr textPage = NativeMethods.FPDFText_LoadPage(nativePageHandle);
+                if (textPage == IntPtr.Zero)
+                    return elements;
+
+                int charCount = NativeMethods.FPDFText_CountChars(textPage);
+
+                for (int i = 0; i < charCount; i++)
+                {
+                    // Call FPDFText_GetCharBox in an if-statement to ensure success.
+                    NativeMethods.FPDFText_GetCharBox(textPage, i, out double left, out double right, out double bottom, out double top);
+                    {
+                        // Create a rectangle for the character.
+                        RectangleF charRect = new RectangleF((float)left, (float)top, (float)(right - left), (float)(bottom - top));
+
+                        if (area.Contains(charRect))
+                        {
+                            // Allocate a buffer for one character plus a null terminator.
+                            byte[] buffer = new byte[2];
+                            int result = NativeMethods.FPDFText_GetText(textPage, i, 1, buffer);
+                            if (result > 0)
+                            {
+                                // PDFium typically returns text in ANSI encoding.
+                                char character = (char)buffer[0];
+                                elements.Add(new TextElement { Character = character, Bounds = charRect });
+                            }
+                        }
+                    }
+                }
+                NativeMethods.FPDFText_ClosePage(textPage);
+            }
+            return elements;
+        }
+
 
         /// <summary>
         /// Get all text on the page.

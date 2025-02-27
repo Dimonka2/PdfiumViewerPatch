@@ -11,7 +11,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace PdfiumViewer
 {
-    internal static partial class NativeMethods
+    public static partial class NativeMethods
     {
         static NativeMethods()
         {
