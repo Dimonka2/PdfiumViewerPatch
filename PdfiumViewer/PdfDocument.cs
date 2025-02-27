@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Drawing.Printing;
@@ -530,15 +531,15 @@ namespace PdfiumViewer
                         // Create a rectangle for the character.
                         RectangleF charRect = new RectangleF((float)left, (float)top, (float)(right - left), (float)(bottom - top));
 
-                        if (area.Contains(charRect))
+                        if (area.IntersectsWith(charRect))
                         {
                             // Allocate a buffer for one character plus a null terminator.
-                            byte[] buffer = new byte[2];
+                            byte[] buffer = new byte[4]; // Space for 1 UTF-16 character + null terminator
                             int result = NativeMethods.FPDFText_GetText(textPage, i, 1, buffer);
                             if (result > 0)
                             {
                                 // PDFium typically returns text in ANSI encoding.
-                                char character = (char)buffer[0];
+                                char character = Encoding.Unicode.GetChars(buffer)[0];
                                 elements.Add(new TextElement { Character = character, Bounds = charRect });
                             }
                         }
