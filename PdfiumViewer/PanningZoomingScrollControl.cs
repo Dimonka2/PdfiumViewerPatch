@@ -12,7 +12,7 @@ namespace PdfiumViewer
     public abstract class PanningZoomingScrollControl : CustomScrollControl
     {
         public const double DefaultZoomMin = 0.1;
-        public const double DefaultZoomMax = 5;
+        public const double DefaultZoomMax = 25;
         public const double DefaultZoomFactor = 1.2;
 
         private static readonly Cursor PanCursor;
