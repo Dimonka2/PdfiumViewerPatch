@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 [assembly: AssemblyTitle("PdfViewer")]
 [assembly: AssemblyDescription("")]
@@ -12,8 +13,9 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCulture("")]
 
 [assembly: ComVisible(false)]
-[assembly: CLSCompliant(true)]
 [assembly: Guid("ca63710b-8bc7-4fc5-8c39-210bacf591e8")]
+
+[assembly: SupportedOSPlatform("windows")]
 
 [assembly: AssemblyVersion("2.13.0.0")]
 [assembly: AssemblyFileVersion("2.13.0.0")]
